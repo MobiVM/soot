@@ -28,8 +28,6 @@ package soot;
 
 import soot.util.*;
 
-import java.util.Set;
-
 /** A local variable, used within Body
  * classes.  Intermediate representations must use an implementation
  * of Local for their local variables.
@@ -50,22 +48,10 @@ public interface Local extends Value, Numberable, Immediate
      * -1 if it doesn't represent a local variable.
      * RoboVM note: Added in RoboVM.
      */
-    public int getVariableTableIndex();
+    public int getIndex();
     /**
-     * Sets the index in local variable table this Local represents.
+     * Sets the index of the bytecode local variable this Local represents.
      * RoboVM note: Added in RoboVM.
      */
-    public void setVariableTableIndex(int variableTableIndex);
-
-    /**
-     * assigns indexes of variables in variable table that shares same variable slot in JVM
-     * RoboVM note: Added in RoboVM.
-     */
-    public void setSameSlotVariables(Set<Integer> indexes);
-
-    /**
-     * returns indexes of variables in variable table that shares same variable slot in JVM
-     * RoboVM note: Added in RoboVM.
-     */
-    public Set<Integer> getSameSlotVariables();
+    public void setIndex(int index);
 }

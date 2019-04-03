@@ -31,9 +31,6 @@
 
 package soot.coffi;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /** A debugging attribute, this gives the names of local variables
  * within blocks of bytecode.
  * @see attribute_info
@@ -94,23 +91,7 @@ class LocalVariableTable_attribute extends attribute_info {
       }
       return null;
    }
-
-    // RoboVM note: Start change. finds variable index in local variable table for slot and byte code position
-    public int getLocalVariableIndex(int idx, int code) {
-        // now to find that variable
-        for (int i = 0; i < local_variable_table_length; i++) {
-            local_variable_table_entry e = local_variable_table[i];
-            // dkimitsa: fix for local variable that has no code length
-            if (e.index == idx && (code == -1 || (e.length == 0 && code == e.start_pc) || (code >= e.start_pc && code < e.start_pc + e.length))) {
-                // found the variable
-                return i;
-            }
-        }
-
-        return -1;
-    }
-    // RoboVM note: End change.
-
+   
    public String toString()
    {
         StringBuffer buffer = new StringBuffer();

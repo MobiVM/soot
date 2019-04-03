@@ -55,7 +55,7 @@ class local_variable_table_entry {
    // RoboVM note: Start change.
    /** First Instruction object (after parsing) of code wherein this entry applies. */
    public Instruction start_inst;
-   /** First Instruction object (after parsing) of code wherein this entry does not apply.
+   /** Last Instruction object (after parsing) of code wherein this entry does not apply.
     * (or <i>null</i> for the end of code).
     */
    public Instruction end_inst;

@@ -33,9 +33,6 @@ package soot.coffi;
 import soot.jimple.*;
 import java.util.*;
 import java.io.*;
-
-import soot.jimple.internal.ImmediateBox;
-import soot.robovm.RoboVMLocalAlias;
 import soot.tagkit.*;
 import soot.*;
 
@@ -830,57 +827,14 @@ swtch:
         }
     }
 
-    // RoboVM note: returns list of local's value boxes which usage STARTS at activeOriginalIndex
-    public void preAllocateLocals(JimpleBody listBody, int startSlotIndex) {
-        if (activeVariableTable == null)
-            return;
-        Map<Integer, Map<String, Set<Integer>>> localMap = new HashMap<>();
-        for (int idx = 0; idx < activeVariableTable.local_variable_table_length; idx++) {
-            local_variable_table_entry e = activeVariableTable.local_variable_table[idx];
-            int slotIndex = e.index;
-            if (slotIndex < startSlotIndex)
-                continue;
-            String type = ((CONSTANT_Utf8_info)(activeConstantPool[e.descriptor_index])).convert();
-            Map<String, Set<Integer>> localsOfSlot = localMap.get(slotIndex);
-            if (localsOfSlot == null) {
-                localsOfSlot = new HashMap<>();
-                localMap.put(slotIndex, localsOfSlot);
-            }
-
-            Set<Integer> localsOfType = localsOfSlot.get(type);
-            if (localsOfType == null) {
-                localsOfType = new HashSet<>();
-                localsOfSlot.put(type, localsOfType);
-            }
-
-            localsOfType.add(idx);
-        }
-
-        // now create locals
-        for (Map.Entry<Integer, Map<String, Set<Integer>>> e : localMap.entrySet()) {
-            int slotIndex = e.getKey();
-            String name = "l" + slotIndex;
-            Local l = Jimple.v().newLocal(name, UnknownType.v());
-            RoboVMLocalAlias slotLocal = new RoboVMLocalAlias(l, -1);
-            listBody.getLocals().add(slotLocal);
-            // and add aliases grouped by type
-            for (Set<Integer> varIndexes : e.getValue().values())
-                slotLocal.addAliases(varIndexes);
-        }
-    }
-
-    // RoboVM note: End change.
-
     Local getLocalForIndex(JimpleBody listBody, int index)
     {
-        // RoboVM note: dkimitsa: this method was hardly reworked to work with local table var index instead of slot index
-
         String name = null;
         String debug_type = null;
         boolean assignedName = false;
-        int variableByteCodeIdx = activeOriginalIndex;
-        if(variableByteCodeIdx != -1)
+        if(useFaithfulNaming && activeVariableTable != null && activeOriginalIndex != -1)
         {
+            int variableByteCodeIdx = activeOriginalIndex;
             // Feng asks: why this is necessary? it does wrong thing
             //            for searching local variable names.
             // It is going to be verified with plam.
@@ -888,10 +842,7 @@ swtch:
                 variableByteCodeIdx++;
             if (isWideLocalStore)
                 variableByteCodeIdx++;
-        }
 
-        if (useFaithfulNaming && activeVariableTable != null && variableByteCodeIdx != -1)
-        {
             name = activeVariableTable.getLocalVariableName(activeConstantPool, index, variableByteCodeIdx);
             if (activeVariableTypeTable != null) {
                 debug_type = activeVariableTypeTable.getLocalVariableType(activeConstantPool, index, variableByteCodeIdx);
@@ -902,25 +853,18 @@ swtch:
                 assignedName = true;
         }
 
-        int localVariableIndex = -1;
-        if (activeVariableTable != null)
-            localVariableIndex = activeVariableTable.getLocalVariableIndex(index, variableByteCodeIdx);
-
         if(!assignedName)
             name = "l" + index;
 
-        RoboVMLocalAlias slotLocal = declaresLocal(listBody, name) ? (RoboVMLocalAlias) getLocal(listBody, name) : null;
-        if(slotLocal != null)
-            return slotLocal.getAlias(localVariableIndex);
-        else {
+        if (declaresLocal(listBody, name)) {
+            return getLocal(listBody, name);
+        } else {
             Local l = Jimple.v().newLocal(name, UnknownType.v());
-            l.setVariableTableIndex(localVariableIndex); // RoboVM note: Added
-            slotLocal = new RoboVMLocalAlias(l, localVariableIndex);
+            l.setIndex(index); // RoboVM note: Added
+            listBody.getLocals().add(l);
 
-            listBody.getLocals().add(slotLocal);
-            return slotLocal;
+            return l;
         }
-        // RoboVM note: end
     }
 
     /*

@@ -36,7 +36,6 @@ import java.util.*;
 
 import soot.*;
 import soot.jimple.*;
-import soot.robovm.RoboVmNopStmt;
 import soot.util.*;
 import soot.tagkit.*;
 
@@ -710,11 +709,9 @@ public class CFG {
     
                     int orig_start = lat_entry.start_pc; // inclusive
                     int orig_end = lat_entry.start_pc + lat_entry.length; // exclusive
-                    if ( orig_start < orig_end_of_subr &&
-                         orig_end > orig_start_of_subr) {
+                    if ( orig_start < orig_end_of_subr && orig_end > orig_start_of_subr) {
                         // At least a portion of the cloned subroutine is within the range of the local_variable_table_entry.
-                        local_variable_table_entry newone = 
-                            new local_variable_table_entry();
+                        local_variable_table_entry newone = new local_variable_table_entry();
                         newone.index = lat_entry.index;
                         newone.name_index = lat_entry.name_index;
                         newone.descriptor_index = lat_entry.descriptor_index;
@@ -946,8 +943,6 @@ public class CFG {
     */
     public boolean jimplify(cp_info constant_pool[],int this_class, BootstrapMethods_attribute bootstrap_methods_attribute, JimpleBody listBody)
    {
-   	// ROBOVM: dkimitsa: logic is reworked to allocate all variables by Util.v().getLocalForIndex which will
-   	// keep variable table index
         this.bootstrap_methods_attribute = bootstrap_methods_attribute;
 		Util.v().setClassNameToAbbreviation(new HashMap());
 
@@ -1005,12 +1000,10 @@ public class CFG {
                     Local local = Util.v().getLocalForIndex(listBody, currentLocalIndex);
                     units.add(Jimple.v().newIdentityStmt(local, Jimple.v().newParameterRef(type, argCount)));
 
-                    if(type.equals(DoubleType.v()) ||
-                        type.equals(LongType.v()))
+                    if(type.equals(DoubleType.v()) || type.equals(LongType.v()))
                     {
                         currentLocalIndex += 2;
-                    }
-                    else {
+                    } else {
                         currentLocalIndex += 1;
                     }
 
@@ -1018,7 +1011,6 @@ public class CFG {
                 }
             }
 
-            Util.v().preAllocateLocals(listBody, currentLocalIndex); // ROBOVM: dkimitsa: added
             Util.v().resetEasyNames();
         }
 
@@ -1567,29 +1559,25 @@ public class CFG {
 	Code_attribute ca = method.locate_code_attribute();
         LocalVariableTable_attribute la = ca.findLocalVariableTable();
         if (la != null) {
-            for (int localVariableIndex = 0; localVariableIndex < la.local_variable_table.length; localVariableIndex++) {
-            	local_variable_table_entry entry = la.local_variable_table[localVariableIndex];
+            for (local_variable_table_entry entry : la.local_variable_table) {
                 if (!(constant_pool[entry.name_index] instanceof CONSTANT_Utf8_info)) {
                     throw new RuntimeException( "What? A local variable table name_index isn't a UTF8 entry?");
                 }
                 String name = ((CONSTANT_Utf8_info) (constant_pool[entry.name_index])).convert();
                 Stmt startStmt = null;
                 Stmt endStmt = null;
-                if (entry.length > 0) {
-			if (entry.start_inst == firstInstruction && entry.end_inst == null) {
-				// Parameter. Make sure the LocalVariable extends from the
-				// start of the method before the parameters are assigned to
-				// locals in the IdentityStmts inserted in jimplify(...).
-				startStmt = (Stmt) units.getFirst();
-			} else {
-				startStmt = instructionToFirstStmt.get(entry.start_inst);
-				// using .prev as end_inst is exclusive
-				if (entry.end_inst != null && entry.end_inst.prev != null) {
-					endStmt = instructionToFirstStmt.get(entry.end_inst.prev);
-				}
-			}
-		}
-                soot.LocalVariable lv = new LocalVariable(name, localVariableIndex, startStmt, endStmt,
+                if (entry.start_inst == firstInstruction && entry.end_inst == null) {
+                    // Parameter. Make sure the LocalVariable extends from the
+                    // start of the method before the parameters are assigned to
+                    // locals in the IdentityStmts inserted in jimplify(...).
+                    startStmt = (Stmt) units.getFirst();
+                } else {
+                    startStmt = instructionToFirstStmt.get(entry.start_inst);
+                    if (entry.end_inst != null) {
+                        endStmt = instructionToFirstStmt.get(entry.end_inst);
+                    }
+                }
+                soot.LocalVariable lv = new LocalVariable(name, entry.index, startStmt, endStmt,
                         ((CONSTANT_Utf8_info) constant_pool[entry.descriptor_index]).convert());
                 listBody.getLocalVariables().add(lv);
             }

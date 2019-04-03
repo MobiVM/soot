@@ -28,6 +28,8 @@
 
 
 package soot.toolkits.scalar;
+import soot.jimple.IdentityStmt;
+import soot.jimple.ParameterRef;
 import soot.options.*;
 
 import soot.*;
@@ -72,7 +74,8 @@ public class LocalSplitter extends BodyTransformer
         if(Options.v().time())
                 Timers.v().splitPhase1Timer.start();
 
-        // Go through the definitions, building the webs
+
+            // Go through the definitions, building the webs
         {
             ExceptionalUnitGraph graph = new ExceptionalUnitGraph(body);
 
@@ -106,6 +109,7 @@ public class LocalSplitter extends BodyTransformer
                 ValueBox loBox = (ValueBox)s.getDefBoxes().get(0);
                 Value lo = loBox.getValue();
 
+                // RoboVM added: skip spliting locals that are paramer one
                 if(lo instanceof Local && !markedBoxes.contains(loBox))
                 {
                     LinkedList<Unit> defsToVisit = new LinkedList<Unit>();
@@ -180,7 +184,7 @@ public class LocalSplitter extends BodyTransformer
             }
 
             // RoboVM note: Added in RoboVM to merge webs referring to the same
-            // local variable in the original source code. This prevents 
+            // local variable in the original source code. This prevents
             // splitting of such Locals.
             webs = mergeWebs(body, webs, boxToUnit, localUses);
         }
@@ -197,16 +201,15 @@ public class LocalSplitter extends BodyTransformer
                 ValueBox rep = (ValueBox) web.get(0);
                 Local desiredLocal = (Local) rep.getValue();
 
-                // dkimitsa: for local with variable table index attached there is required to do split
-                // as this variable is only alias and not attached to body yet and split will attach it
-                int useCount = localToUseCount.containsKey(desiredLocal) ?  localToUseCount.get(desiredLocal) : 0;
-                if(useCount == 0 && desiredLocal.getVariableTableIndex() == -1)
+                if(!localToUseCount.containsKey(desiredLocal))
                 {
-                    localToUseCount.put(desiredLocal, 1);
-                } else {
+                    // claim this local for this set
+                    localToUseCount.put(desiredLocal, new Integer(1));
+                }
+                else {
                     // generate a new local
-                    useCount += 1;
-                    localToUseCount.put(desiredLocal, useCount);
+                    int useCount = localToUseCount.get(desiredLocal).intValue() + 1;
+                    localToUseCount.put(desiredLocal, new Integer(useCount));
         
                     Local local = (Local) desiredLocal.clone();
                     local.setName(desiredLocal.getName() + "#" + useCount);
@@ -228,11 +231,11 @@ public class LocalSplitter extends BodyTransformer
         if(Options.v().time())
             Timers.v().splitPhase2Timer.end();
 
-    }   
+    }
 
     /**
-     * Merges webs referring to the same local variable in the original source 
-     * code. This prevents splitting of Locals which correspond to local 
+     * Merges webs referring to the same local variable in the original source
+     * code. This prevents splitting of Locals which correspond to local
      * variables. Splitting would otherwise interfere with debug info
      * generation.
      * RoboVM note: Added in RoboVM.
@@ -245,17 +248,14 @@ public class LocalSplitter extends BodyTransformer
             // webs refer to the same local variable we merge them into one.
             List<ValueBox> web1 = websCopy.removeFirst();
             Local local1 = (Local) web1.get(0).getValue();
-            if (local1.getVariableTableIndex() == -1) {
+            if (local1.getIndex() == -1) {
                 // The Local doesn't refer to a local variable in the bytecode but rather a stack slot.
                 result.add(web1);
                 continue;
             }
             List<ValueBox> mergedWeb = new ArrayList<>(web1);
-            Set<LocalVariable> lvs1 = findLocalVariables(web1, null, body);
-            if (lvs1.isEmpty())
-                continue;
-
-            String expectedType = lvs1.iterator().next().getDescriptor();
+            Set<LocalVariable> lvs1 = findLocalVariables(web1, local1, null, boxToUnit, body);
+            String expectedType = lvs1.isEmpty()? null: lvs1.iterator().next().getDescriptor();
 
             for (Iterator<List> it2 = websCopy.iterator(); it2.hasNext();) {
                 List<ValueBox> web2 = it2.next();
@@ -263,8 +263,8 @@ public class LocalSplitter extends BodyTransformer
                 if (!local1.equals(local2)) {
                     continue;
                 }
-                Set<LocalVariable> lvs2 = findLocalVariables(web2, expectedType, body);
-                if (!lvs1.isEmpty() && !lvs2.isEmpty()) {
+                Set<LocalVariable> lvs2 = findLocalVariables(web2, local2, expectedType, boxToUnit, body);
+                if (!lvs1.isEmpty() && lvs1.equals(lvs2)) {
                     mergedWeb.addAll(web2);
                     it2.remove();
                 }
@@ -278,40 +278,74 @@ public class LocalSplitter extends BodyTransformer
     /**
      * RoboVM note: Added in RoboVM.
      */
-    private Set<LocalVariable> findLocalVariables(List<ValueBox> web, String expectedTypeDescriptor, Body body) {
+    private Set<LocalVariable> findLocalVariables(List<ValueBox> web, Local local, String expectedTypeDescriptor, Map<ValueBox, Unit> boxToUnit, Body body) {
         Set<LocalVariable> lvs = new HashSet<>();
-        boolean incompatibleType = false;
-        String firstType = null;
-        for (ValueBox box : web) {
-            Local l = (Local) box.getValue();
-            if (l.getVariableTableIndex() < 0) {
-                lvs.clear();
-                return lvs;
-            }
-            LocalVariable lv = body.getLocalVariables().get(l.getVariableTableIndex());
-            lvs.add(lv);
+        if (local.getIndex() != -1) {
+            boolean incompatibleType = false;
+            String firstType = null;
+            for (ValueBox box : web) {
+                LocalVariable lv = findLocalVariable(body, local.getIndex(), boxToUnit.get(box));
+                if (lv != null) {
+                    lvs.add(lv);
+                    // does this local have a compatible type with the other web?
+                    // if not we'll return an empty set and the webs don't get merged
+                    if (expectedTypeDescriptor != null && lv.getDescriptor().equals(expectedTypeDescriptor)) {
+                        incompatibleType = true;
+                    }
 
-            // does this local have a compatible type with the other web?
-            // if not we'll return an empty set and the webs don't get merged
-            if (expectedTypeDescriptor != null && !lv.getDescriptor().equals(expectedTypeDescriptor)) {
-                incompatibleType = true;
-            }
-
-            // are the types of this web's locals consistent?
-            // if not we'll return an empty set and the
-            // webs don't get merged, see #920
-            if (firstType == null) {
-                firstType = lv.getDescriptor();
-            } else if (!firstType.equals(lv.getDescriptor())) {
-                incompatibleType = true;
+                    // are the types of this web's locals consistent?
+                    // if not we'll return an empty set and the
+                    // webs don't get merged, see #920
+                    if (firstType == null) {
+                        firstType = lv.getDescriptor();
+                    } else if (!firstType.equals(lv.getDescriptor())) {
+                        incompatibleType = true;
+                    }
+                }
             }
 
+            // if we encountered incompatible types, either
+            // between the webs or inside the web, we
+            // return an empty set so the webs don't get
+            // merged
             if (incompatibleType) {
                 lvs.clear();
                 return lvs;
             }
-        }
 
+            if (lvs.size() > 1) {
+                // Verify that all LocalVariables refer to a variable with the same name.
+                String name = null;
+                for (LocalVariable lv : lvs) {
+                    if (name == null) {
+                        name = lv.getName();
+                    } else {
+                        if (!lv.getName().equals(name)) {
+                            throw new IllegalStateException("Found LocalVariables do "
+                                    + "not refer to a variable with the same name: " + lvs);
+                        }
+                    }
+                }
+            }
+        }
         return lvs;
+    }
+
+    /**
+     * Finds a {@link LocalVariable} with the specified local variable index
+     * at the specified {@link Unit} or {@code null} if none was found.
+     * RoboVM note: Added in RoboVM.
+     */
+    private LocalVariable findLocalVariable(Body body, int index, Unit unit) {
+        PatchingChain<Unit> units = body.getUnits();
+        for (LocalVariable lv : body.getLocalVariables()) {
+            if (lv.getIndex() == index) {
+                if ((unit == lv.getStartUnit() || units.follows(unit, lv.getStartUnit()))
+                        && (lv.getEndUnit() == null || units.follows(lv.getEndUnit(), unit))) {
+                    return lv;
+                }
+            }
+        }
+        return null;
     }
 }

@@ -296,6 +296,12 @@ public class Singletons {
         return instance_soot_toolkits_scalar_LocalPacker;
     }
 
+    private soot.toolkits.scalar.RoboVmLocalPacker instance_soot_toolkits_scalar_RoboVmLocalPacker;
+    public soot.toolkits.scalar.RoboVmLocalPacker soot_toolkits_scalar_RoboVmLocalPacker() {
+        if( instance_soot_toolkits_scalar_RoboVmLocalPacker == null ) instance_soot_toolkits_scalar_RoboVmLocalPacker = new soot.toolkits.scalar.RoboVmLocalPacker( g );
+        return instance_soot_toolkits_scalar_RoboVmLocalPacker;
+    }
+
     private soot.toolkits.scalar.LocalSplitter instance_soot_toolkits_scalar_LocalSplitter;
     public soot.toolkits.scalar.LocalSplitter soot_toolkits_scalar_LocalSplitter() {
         if( instance_soot_toolkits_scalar_LocalSplitter == null ) instance_soot_toolkits_scalar_LocalSplitter = new soot.toolkits.scalar.LocalSplitter( g );

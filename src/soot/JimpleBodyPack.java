@@ -67,6 +67,9 @@ public class JimpleBodyPack extends BodyPack
         
         if(Options.v().time()) Timers.v().assignTimer.end();
 
+        // RoboVM note: Added in RoboVM, merge back locals once they received type
+        PackManager.v().getTransform( "jb.robovm.lp" ).apply( b );
+
         if(options.use_original_names())
         {   
             PackManager.v().getTransform( "jb.ulp" ).apply( b );

@@ -28,6 +28,7 @@ package soot.jimple.internal;
 
 import soot.*;
 import soot.jimple.*;
+import soot.jimple.toolkits.typing.fast.BottomType;
 import soot.util.*;
 import java.util.*;
 
@@ -39,7 +40,7 @@ public class JimpleLocal implements Local
     int fixedHashCode;
     boolean isHashCodeChosen;
 
-    int variableTableIndex = -1; // RoboVM note: Added in RoboVM.
+    int index = -1; // RoboVM note: Added in RoboVM.
 
     /** Constructs a JimpleLocal of the given name and type. */
     public JimpleLocal(String name, Type t)
@@ -66,7 +67,7 @@ public class JimpleLocal implements Local
     {
         // RoboVM note: Changed to also clone index.
         JimpleLocal l = new JimpleLocal(name, type);
-        l.variableTableIndex = this.variableTableIndex;
+        l.index = this.index;
         return l;
     }
 
@@ -83,23 +84,12 @@ public class JimpleLocal implements Local
     }
 
     // RoboVM note: Start changes.
-    public int getVariableTableIndex() {
-        return variableTableIndex;
+    public int getIndex() {
+        return index;
     }
 
-    public void setVariableTableIndex(int variableTableIndex) {
-        this.variableTableIndex = variableTableIndex;
-    }
-
-    private Set<Integer> sameSlotVariables;
-    @Override
-    public void setSameSlotVariables(Set<Integer> indexes) {
-        this.sameSlotVariables = indexes;
-    }
-
-    @Override
-    public Set<Integer> getSameSlotVariables() {
-        return sameSlotVariables;
+    public void setIndex(int index) {
+        this.index = index;
     }
     // RoboVM note: End changes.
 
@@ -139,8 +129,7 @@ public class JimpleLocal implements Local
 
     public String toString()
     {
-        return getName() + (variableTableIndex != -1 ? (", index=" + variableTableIndex) : "") +
-                (sameSlotVariables != null ? ( ", vars=" + sameSlotVariables) : "");
+        return getName() + ((type != null && type != BottomType.v()) ? ": " + type : "") + (index != -1 ? (", index=" + index) : "");
     }
     
     public void toString(UnitPrinter up) {
@@ -161,7 +150,5 @@ public class JimpleLocal implements Local
     public final void setNumber( int number ) { this.number = number; }
 
     private int number = 0;
-
-
 }
 
