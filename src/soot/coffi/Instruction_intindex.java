@@ -69,7 +69,7 @@ class Instruction_intindex extends Instruction {
    public void markCPRefs(boolean[] refs) { refs[arg_i] = true; }
    public void redirectCPRefs(short redirect[]) { arg_i = redirect[arg_i]; }
    public int parse(byte bc[],int index) {
-      arg_i = getShort(bc,index);
+      arg_i = getUnsignedShort(bc,index);
       return index+2;
    }
    public int compile(byte bc[],int index) {

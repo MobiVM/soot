@@ -20,9 +20,12 @@
 package soot;
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -43,6 +46,9 @@ public class SourceLocator
 {
     public SourceLocator( Singletons.Global g ) {}
     public static SourceLocator v() { return G.v().soot_SourceLocator(); }
+
+    public static final String DUMMY_CLASSPATH_JDK9_FS = "VIRTUAL_FS_FOR_JDK";
+    private boolean java9Mode = false;
 
     protected Set<ClassLoader> additionalClassLoaders = new HashSet<ClassLoader>();
 	protected Set<String> classesToLoad;
@@ -97,7 +103,10 @@ public class SourceLocator
 
     private void setupClassProviders() {
         classProviders = new LinkedList<ClassProvider>();
-                classProviders.add(new CoffiClassProvider());
+        classProviders.add(new CoffiClassProvider());
+        if (this.java9Mode) {
+            classProviders.add(new CoffiJava9ClassProvider());
+        }
     }
 
     private List<ClassProvider> classProviders;
@@ -359,6 +368,13 @@ public class SourceLocator
             String canonicalDir;
             try {
                 canonicalDir = new File(originalDir).getCanonicalPath();
+                // FIXME: make this nice in the future
+                // currently, we do not add it to NOT break backward compatibility
+                // instead, we add the CoffiJava9ClassProvider in setupClassProvider()
+                if (originalDir.equals(DUMMY_CLASSPATH_JDK9_FS)) {
+                    SourceLocator.v().java9Mode = true;
+                    continue;
+                }
                 ret.add(canonicalDir);
             } catch( IOException e ) {
                 throw new CompilationDeathException( "Couldn't resolve classpath entry "+originalDir+": "+e );
@@ -372,14 +388,17 @@ public class SourceLocator
             this.entry = entry;
         }
         FoundFile( File file ) {
-            this.file = file;
+            this.path = file.toPath();
         }
-        public File file;
+        FoundFile( Path path ) {
+            this.path = path;
+        }
+        public Path path;
         public ZipFile zipFile;
         public ZipEntry entry;
         public InputStream inputStream() {
             try {
-                if( file != null ) return new FileInputStream(file);
+                if( path != null ) return Files.newInputStream(path);
                 return doJDKBugWorkaround(zipFile.getInputStream(entry),
                         entry.getSize());
             } catch( IOException e ) {
@@ -435,6 +454,24 @@ public class SourceLocator
         } catch( IOException e ) {
             throw new RuntimeException( "Caught IOException "+e+" looking in jar file "+jar+" for file "+fileName );
         }
+    }
+    /**
+     * Looks up classes in Java 9's virtual filesystem jrt:/
+     *
+     * @param archivePath
+     *          path to the filesystem
+     * @param fileName
+     *          the file to search
+     * @return the FoundFile
+     */
+    public FoundFile lookUpInVirtualFileSystem(String archivePath, String fileName) {
+        // FileSystem fs = FileSystems.getFileSystem(URI.create(archivePath));
+        Path foundFile = Paths.get(URI.create(archivePath)).resolve(fileName);
+        if (foundFile != null && Files.isRegularFile(foundFile)) {
+            return new FoundFile(foundFile);
+        }
+
+        return null;
     }
     private HashMap<String, String> sourceToClassMap;
 
